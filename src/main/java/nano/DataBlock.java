@@ -1,5 +1,8 @@
 package nano;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 class DataBlock {
     private int id;
     private String block_id;
@@ -19,6 +22,36 @@ class DataBlock {
         this.link_as_account = link_as_account;
         this.account = account;
         this.amount = amount;
+    }
+
+    public DataBlock() {}
+
+    public void setValue(String fieldName, Object object) {
+        Method method = null;
+
+        if (object == null) {
+            System.out.println("setValueP: Passed object is null");
+        } else if (object.getClass() != String.class && object.getClass() != Integer.class) {
+            System.out.println("setValueP: assed object is not a String and Integer but a " + object.getClass());
+        } else {
+            try {
+                method = this.getClass().getDeclaredMethod("set" + Character.toString(fieldName.charAt(0)).toUpperCase()+fieldName.substring(1),object.getClass());
+                //method = this.getClass().getMethod("set" + Character.toString(fieldName.charAt(0)).toUpperCase()+fieldName.substring(1));
+            } catch (NoSuchMethodException | NullPointerException e) {
+                System.out.println("Tried to create method: " + "set" + Character.toString(fieldName.charAt(0)).toUpperCase()+fieldName.substring(1));
+                e.printStackTrace();
+            }
+
+            try {
+                if (method != null) {
+                    method.invoke(this,object);
+                } else
+                    System.out.println("Object method is a NULL!");
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                System.out.println("Tried to access method: " + "set" + Character.toString(fieldName.charAt(0)).toUpperCase()+fieldName.substring(1) + " with object type: " + object.getClass().toString());
+                e.printStackTrace();
+            }
+        }
     }
 
     public int getId() {
