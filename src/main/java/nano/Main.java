@@ -105,11 +105,11 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
         }
         Vector<DataBlock> data = getOutput(query, connection);
         DateTimeFormatter loopFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH");
+        System.out.println("Data size: " + data.size());
         if (action.equals("account")) {
             for (int i=0;i<data.size();i++) {
                 LocalDateTime caughtDate = LocalDateTime.parse(data.get(i).getTimestamp().substring(0,13),loopFormatter);
-                if (mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)) == null) break;
-                else {
+                if (mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)) != null) {
                     Integer currentValue = Integer.parseInt(mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)));
                     currentValue++;
                     mapResults.replace(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter), currentValue.toString());
@@ -118,12 +118,9 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
         } else if (action.equals("amount")) {
             for (int i=0;i<data.size();i++) {
                 LocalDateTime caughtDate = LocalDateTime.parse(data.get(i).getTimestamp().substring(0,13),loopFormatter);
-                if (mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)) == null) break;
-                else {
+                if (mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)) != null) {
                     BigInteger currentValue = new BigInteger(mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)));
-                    //System.out.println("currentValue = " + currentValue.toString(10));
                     BigInteger additionalData = new BigInteger(data.get(i).getAmount());
-                    //System.out.println("additionalData = " + additionalData.toString(10));
                     BigInteger newValue = currentValue.add(additionalData);
                     mapResults.replace(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter), newValue.toString(10));
                 }
