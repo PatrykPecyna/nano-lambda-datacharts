@@ -7,9 +7,12 @@ import com.jcraft.jsch.Session;
 import com.jcraft.jsch.UserInfo;
 import org.apache.commons.lang.StringUtils;
 
+import java.math.BigInteger;
 import java.sql.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Vector;
 
 public class Main implements RequestHandler<RequestClass, ResponseClass> {
@@ -17,14 +20,14 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
     public ResponseClass handleRequest(RequestClass request, Context context) {
         ResponseClass response = null;
         try {
-            response = go(Integer.parseInt(request.getDays()), Integer.parseInt(request.getTop()));
+            response = go(Integer.parseInt(request.getTop()));
         } catch (Exception e) {
             e.printStackTrace();
         }
         return response;
     }
 
-    public ResponseClass go(int numberOfDays, int topValue) throws Exception {
+    public ResponseClass go(int topValue) throws Exception {
         String sshHost = "ssh.pythonanywhere.com";
         String sshUser = "nanoindexer";
         String sshPassword = "inzynieriaoprogramowania";
@@ -59,24 +62,24 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
         Vector<String> queries = new Vector<String>();
 
         //active_accounts_last_24h
-        queries.add("SELECT account,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL " + numberOfDays + " DAY)");
-        responseObject.setActive_accounts_last_24h(accountsTimestampsResponse(queries.get(0), connection));
+        queries.add("SELECT account,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL 1 DAY)");
+        responseObject.setActive_accounts_last_24h(accountsAmountsTimestampsResponse(queries.get(0), connection, "account"));
 
         //accounts_with_income_last_24h
-        queries.add("SELECT account,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL " + numberOfDays + " DAY) AND type = 'receive'");
-        responseObject.setAccounts_with_income_last_24h(accountsTimestampsResponse(queries.get(1), connection));
+        queries.add("SELECT account,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND type = 'receive'");
+        responseObject.setAccounts_with_income_last_24h(accountsAmountsTimestampsResponse(queries.get(1), connection, "account"));
 
         //accounts_with_outgo_last_24h
-        queries.add("SELECT account,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL " + numberOfDays + " DAY) AND type = 'send'");
-        responseObject.setAccounts_with_outgo_last_24h(accountsTimestampsResponse(queries.get(2),connection));
+        queries.add("SELECT account,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND type = 'send'");
+        responseObject.setAccounts_with_outgo_last_24h(accountsAmountsTimestampsResponse(queries.get(2),connection, "account"));
 
         //amount_sent_last_24h
-        queries.add("SELECT SUM(amount) AS amount FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL " + numberOfDays + " DAY) AND type = 'receive'");
-        responseObject.setAmount_sent_last_24h(getOutput(queries.get(3), connection).lastElement().getAmount());
+        queries.add("SELECT amount,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND type = 'send'");
+        responseObject.setAmount_sent_last_24h(accountsAmountsTimestampsResponse(queries.get(3),connection, "amount"));
 
         //amount_received_last_24h
-        queries.add("SELECT SUM(amount) AS amount FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL " + numberOfDays + " DAY) AND type = 'send'");
-        responseObject.setAmount_received_last_24h(getOutput(queries.get(4), connection).lastElement().getAmount());
+        queries.add("SELECT amount,timestamp FROM nanosite_tabela WHERE timestamp > DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND type = 'receive'");
+        responseObject.setAmount_received_last_24h(accountsAmountsTimestampsResponse(queries.get(4),connection, "amount"));
 
         //accounts_with_income_top10
         queries.add("SELECT account, SUM(amount) AS amount FROM nanosite_tabela WHERE type = 'send' GROUP BY account ORDER BY amount LIMIT " + topValue);
@@ -92,23 +95,51 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
         return responseObject;
     }
 
-    public Map<String, String> accountsTimestampsResponse(String query, Connection connection) throws SQLException {
-        Map<String, String> mapResults = new HashMap<>();
-        Vector<DataBlock> data = getOutput(query, connection);
-        for (int i=0;i<data.size();i++) {
-            mapResults.put(data.get(i).getAccount(), data.get(i).getTimestamp());
+    public LinkedHashMap<String, String> accountsAmountsTimestampsResponse(String query, Connection connection, String action) throws SQLException {
+        LinkedHashMap<String, String> mapResults = new LinkedHashMap<String, String>();
+        DateTimeFormatter mainFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH-");
+        DateTimeFormatter hourFormatter = DateTimeFormatter.ofPattern("HH");
+        for (int i=23;i>=0;i--) {
+            LocalDateTime moment = LocalDateTime.now(ZoneId.of("CET")).minusHours(i);
+            mapResults.put(moment.format(mainFormatter) + moment.plusHours(1).format(hourFormatter), "0");
         }
-        System.out.println("AccountsTimestampsResponse: generated " + data.size() + " blocks of data");
+        Vector<DataBlock> data = getOutput(query, connection);
+        DateTimeFormatter loopFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH");
+        if (action.equals("account")) {
+            for (int i=0;i<data.size();i++) {
+                LocalDateTime caughtDate = LocalDateTime.parse(data.get(i).getTimestamp().substring(0,13),loopFormatter);
+                if (mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)) == null) break;
+                else {
+                    Integer currentValue = Integer.parseInt(mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)));
+                    currentValue++;
+                    mapResults.replace(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter), currentValue.toString());
+                }
+            }
+        } else if (action.equals("amount")) {
+            for (int i=0;i<data.size();i++) {
+                LocalDateTime caughtDate = LocalDateTime.parse(data.get(i).getTimestamp().substring(0,13),loopFormatter);
+                if (mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)) == null) break;
+                else {
+                    BigInteger currentValue = new BigInteger(mapResults.get(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter)));
+                    //System.out.println("currentValue = " + currentValue.toString(10));
+                    BigInteger additionalData = new BigInteger(data.get(i).getAmount());
+                    //System.out.println("additionalData = " + additionalData.toString(10));
+                    BigInteger newValue = currentValue.add(additionalData);
+                    mapResults.replace(caughtDate.format(mainFormatter) + caughtDate.plusHours(1).format(hourFormatter), newValue.toString(10));
+                }
+            }
+        }
         return mapResults;
     }
 
-    public Map<String, String> accountsAmountResponse(String query, Connection connection) throws SQLException {
-        Map<String, String> mapResults = new HashMap<>();
+    public LinkedHashMap<String, String> accountsAmountResponse(String query, Connection connection) throws SQLException {
+        LinkedHashMap<String, String> mapResults = new LinkedHashMap<String, String>();
         Vector<DataBlock> data = getOutput(query, connection);
         for (int i=0;i<data.size();i++) {
             mapResults.put(data.get(i).getAccount(), data.get(i).getAmount());
+            //System.out.println("Map element: " +data.get(i).getAccount() + " " + data.get(i).getAmount());
         }
-        System.out.println("AccountsAmountResponse: generated " + data.size() + " blocks of data");
+        //System.out.println("AccountsAmountResponse: generated " + data.size() + " blocks of data");
         return mapResults;
     }
 
@@ -162,16 +193,16 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
                 }
                 else {
                     output.add(new DataBlock());
-                    System.out.println("Created an empty DataBlock");
+                    //System.out.println("Created an empty DataBlock");
                     for (int i=0;i<fields.size();i++) {
                         if (resultSet.getString(i+1) == null) {
                             output.lastElement().setValue(fields.get(i),"null");
                         } else {
                             if (fields.get(i).equals("id")) {
-                                System.out.println("Passing data to setValue: " + fields.get(i) + ", " + Integer.parseInt(resultSet.getString(i+1)) + ".");
+                                //System.out.println("Passing data to setValue: " + fields.get(i) + ", " + Integer.parseInt(resultSet.getString(i+1)) + ".");
                                 output.lastElement().setValue(fields.get(i),Integer.parseInt(resultSet.getString(i+1)));
                             } else {
-                                System.out.println("Passing data to setValue: " + fields.get(i) + ", " + resultSet.getString(i+1) + ".");
+                                //System.out.println("Passing data to setValue: " + fields.get(i) + ", " + resultSet.getString(i+1) + ".");
                                 output.lastElement().setValue(fields.get(i),resultSet.getString(i+1));
                             }
                         }
