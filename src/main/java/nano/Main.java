@@ -82,11 +82,11 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
         responseObject.setAmount_received_last_24h(accountsAmountsTimestampsResponse(queries.get(4),connection, "amount"));
 
         //accounts_with_income_top10
-        queries.add("SELECT account, SUM(amount) AS amount FROM nanosite_tabela WHERE type = 'send' GROUP BY account ORDER BY amount LIMIT " + topValue);
+        queries.add("SELECT account, SUM(amount) AS amount FROM nanosite_tabela WHERE type = 'send' GROUP BY account ORDER BY amount DESC LIMIT " + topValue);
         responseObject.setAccounts_with_income_top10(accountsAmountResponse(queries.get(5),connection));
 
         //accounts_with_outgo_top10
-        queries.add("SELECT account, SUM(amount) AS amount FROM nanosite_tabela WHERE type = 'receive' GROUP BY account ORDER BY amount LIMIT " + topValue);
+        queries.add("SELECT account, SUM(amount) AS amount FROM nanosite_tabela WHERE type = 'receive' GROUP BY account ORDER BY amount DESC LIMIT " + topValue);
         responseObject.setAccounts_with_outgo_top10(accountsAmountResponse(queries.get(6),connection));
 
         connection.close();
@@ -100,7 +100,7 @@ public class Main implements RequestHandler<RequestClass, ResponseClass> {
         DateTimeFormatter mainFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH-");
         DateTimeFormatter hourFormatter = DateTimeFormatter.ofPattern("HH");
         for (int i=23;i>=0;i--) {
-            LocalDateTime moment = LocalDateTime.now(ZoneId.of("CET")).minusHours(i);
+            LocalDateTime moment = LocalDateTime.now(ZoneId.of("UCT")).minusHours(i);
             mapResults.put(moment.format(mainFormatter) + moment.plusHours(1).format(hourFormatter), "0");
         }
         Vector<DataBlock> data = getOutput(query, connection);
